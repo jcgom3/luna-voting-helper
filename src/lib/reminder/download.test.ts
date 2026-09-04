@@ -111,8 +111,8 @@ describe("calendar delivery", () => {
     );
 
     expect(sharedFile?.type).toBe(
-      "text/calendar;charset=utf-8",
-    );
+  "text/calendar",
+);
 
     expect(
       await sharedFile?.text(),
@@ -240,42 +240,42 @@ describe("calendar delivery", () => {
     ).toHaveBeenCalledOnce();
   });
 
-  it("does not download a second copy when the visitor cancels native sharing", async () => {
-    const abortError = new Error("cancelled");
-    abortError.name = "AbortError";
+  it("falls back to download when native sharing aborts without a usable target", async () => {
+  const abortError = new Error("cancelled");
+  abortError.name = "AbortError";
 
-    const anchorClick = vi
-      .spyOn(
-        HTMLAnchorElement.prototype,
-        "click",
-      )
-      .mockImplementation(() => undefined);
+  const anchorClick = vi
+    .spyOn(
+      HTMLAnchorElement.prototype,
+      "click",
+    )
+    .mockImplementation(() => undefined);
 
-    setShareApis({
-      canShare: () => true,
-      share: vi.fn(async () => {
-        throw abortError;
-      }),
-    });
-
-    const result =
-      await downloadCalendarFile(
-        reminderOptions,
-      );
-
-    expect(result).toEqual({
-      success: false,
-      error: "share-cancelled",
-    });
-
-    expect(
-      createObjectUrl,
-    ).not.toHaveBeenCalled();
-
-    expect(
-      anchorClick,
-    ).not.toHaveBeenCalled();
+  setShareApis({
+    canShare: () => true,
+    share: vi.fn(async () => {
+      throw abortError;
+    }),
   });
+
+  const result =
+    await downloadCalendarFile(
+      reminderOptions,
+    );
+
+  expect(result).toEqual({
+    success: true,
+    delivery: "download",
+  });
+
+  expect(
+    createObjectUrl,
+  ).toHaveBeenCalledOnce();
+
+  expect(
+    anchorClick,
+  ).toHaveBeenCalledOnce();
+});
 
   it("reports unsupported delivery APIs without throwing", async () => {
     Object.defineProperty(

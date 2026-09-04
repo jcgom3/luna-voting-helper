@@ -6,24 +6,22 @@ import type { Language } from "@/lib/types/language";
 
 export type DownloadCalendarResult =
   | {
-      success: true;
-      delivery: "file-share" | "download";
-    }
+    success: true;
+    delivery: "file-share" | "download";
+  }
   | {
-      success: false;
-      error:
-        | "calendar-generation-failed"
-        | "share-cancelled"
-        | "download-unsupported"
-        | "download-failed"
-        | "forced-failure";
-    };
+    success: false;
+    error:
+    | "calendar-generation-failed"
+    | "share-cancelled"
+    | "download-unsupported"
+    | "download-failed"
+    | "forced-failure";
+  };
 
 const OBJECT_URL_REVOKE_DELAY_MS = 60_000;
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === "AbortError";
-}
+
 
 function canShareCalendarFile(file: File): boolean {
   if (
@@ -49,22 +47,18 @@ async function shareCalendarFile(
   }
 
   try {
-    await navigator.share({ files: [file] });
+    await navigator.share({
+      files: [file],
+    });
 
     return {
       success: true,
       delivery: "file-share",
     };
-  } catch (error) {
-    if (isAbortError(error)) {
-      return {
-        success: false,
-        error: "share-cancelled",
-      };
-    }
-
-    // Some embedded browsers advertise file sharing but reject it at runtime.
-    // Returning null allows the standard download path to recover.
+  } catch {
+    // AbortError can mean the user cancelled, but it can
+    // also mean that no compatible share target exists.
+    // Allow the regular download fallback to recover.
     return null;
   }
 }
@@ -159,7 +153,7 @@ export async function downloadCalendarFile(options: {
   if (typeof File !== "undefined") {
     try {
       const file = new File([icsContent], filename, {
-        type: "text/calendar;charset=utf-8",
+        type: "text/calendar",
       });
 
       const shareResult = await shareCalendarFile(file);
