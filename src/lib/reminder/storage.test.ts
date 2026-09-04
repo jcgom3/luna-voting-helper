@@ -1,4 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   clearReminderState,
@@ -16,33 +22,135 @@ describe("reminder storage", () => {
   });
 
   it("stores only the reminder values used by the guide", () => {
-    const click = new Date("2026-09-02T21:00:00.000Z");
-    const first = new Date("2026-09-03T21:00:00.000Z");
-    recordVotingMethodClick("facebook", click);
-    saveReminderSchedule({ language: "es" });
+    const click = new Date(
+      "2026-09-02T21:00:00.000Z",
+    );
+
+    const first = new Date(
+      "2026-09-03T21:00:00.000Z",
+    );
+
+    recordVotingMethodClick(
+      "facebook",
+      click,
+    );
+
+    saveReminderSchedule({
+      language: "es",
+    });
+
     expect(readReminderState()).toEqual({
       lastMethodClick: click.toISOString(),
       selectedMethod: "facebook",
       reminderCreated: true,
       reminderLanguage: "es",
       firstReminderAt: first.toISOString(),
-      reminderUid: "luna-vote-reminder-20260903T210000@voteforluna.local",
+      reminderUid:
+        "luna-vote-reminder-20260903T210000@voteforluna.local",
     });
-    expect(Object.keys(localStorage).sort()).toEqual([
+
+    expect(
+      Object.keys(localStorage).sort(),
+    ).toEqual([
       "lunaVote.lastMethodClick",
       "lunaVote.reminderCreated",
       "lunaVote.reminderLanguage",
       "lunaVote.selectedMethod",
     ]);
-    expect(getEstimatedNextVoteTime(click.toISOString()).toISOString()).toBe(first.toISOString());
+
+    expect(
+      getEstimatedNextVoteTime(
+        click.toISOString(),
+      ).toISOString(),
+    ).toBe(first.toISOString());
   });
 
   it("recognizes and clears an active schedule", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-09-04T21:00:00.000Z"));
-    expect(isActiveReminderSchedule("2026-09-03T21:00:00.000Z")).toBe(true);
-    recordVotingMethodClick("text", new Date());
+
+    vi.setSystemTime(
+      new Date("2026-09-04T21:00:00.000Z"),
+    );
+
+    expect(
+      isActiveReminderSchedule(
+        "2026-09-03T21:00:00.000Z",
+      ),
+    ).toBe(true);
+
+    recordVotingMethodClick(
+      "text",
+      new Date(),
+    );
+
     clearReminderState();
-    expect(readReminderState().selectedMethod).toBeNull();
+
+    expect(
+      readReminderState().selectedMethod,
+    ).toBeNull();
+  });
+
+  it("returns an empty state when browser storage cannot be read", () => {
+    vi.spyOn(
+      localStorage,
+      "getItem",
+    ).mockImplementation(() => {
+      throw new DOMException(
+        "Storage is blocked",
+        "SecurityError",
+      );
+    });
+
+    expect(readReminderState()).toEqual({
+      lastMethodClick: null,
+      selectedMethod: null,
+      reminderCreated: false,
+      reminderLanguage: null,
+      firstReminderAt: null,
+      reminderUid: null,
+    });
+  });
+
+  it("treats persistence as best effort when browser storage is blocked", () => {
+    vi.spyOn(
+      localStorage,
+      "setItem",
+    ).mockImplementation(() => {
+      throw new DOMException(
+        "Storage is blocked",
+        "SecurityError",
+      );
+    });
+
+    expect(
+      recordVotingMethodClick(
+        "facebook",
+        new Date(
+          "2026-09-02T21:00:00.000Z",
+        ),
+      ),
+    ).toBe(false);
+
+    expect(
+      saveReminderSchedule({
+        language: "en",
+      }),
+    ).toBe(false);
+  });
+
+  it("does not throw when clearing blocked browser storage", () => {
+    vi.spyOn(
+      localStorage,
+      "removeItem",
+    ).mockImplementation(() => {
+      throw new DOMException(
+        "Storage is blocked",
+        "SecurityError",
+      );
+    });
+
+    expect(
+      clearReminderState(),
+    ).toBe(false);
   });
 });
