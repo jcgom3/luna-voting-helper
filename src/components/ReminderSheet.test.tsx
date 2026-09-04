@@ -73,7 +73,7 @@ describe("ReminderSheet", () => {
       downloadCalendarFile,
     ).mockResolvedValue({
       success: true,
-      delivery: "download",
+      delivery: "calendar-preview",
     });
 
     vi.mocked(
@@ -139,12 +139,12 @@ describe("ReminderSheet", () => {
     ).toHaveBeenCalledWith("facebook");
   });
 
-  it("continues after the native file-share handoff completes", async () => {
+  it("continues after the calendar preview opens", async () => {
     vi.mocked(
       downloadCalendarFile,
     ).mockResolvedValue({
       success: true,
-      delivery: "file-share",
+      delivery: "calendar-preview",
     });
 
     render(
@@ -171,7 +171,7 @@ describe("ReminderSheet", () => {
     });
 
     act(() => {
-      vi.advanceTimersByTime(0);
+      vi.advanceTimersByTime(1_500);
     });
 
     expect(
@@ -301,7 +301,7 @@ describe("ReminderSheet", () => {
     let resolveDownload:
       | ((value: {
           success: true;
-          delivery: "file-share";
+          delivery: "calendar-preview";
         }) => void)
       | undefined;
 
@@ -352,7 +352,7 @@ describe("ReminderSheet", () => {
     await act(async () => {
       resolveDownload?.({
         success: true,
-        delivery: "file-share",
+        delivery: "calendar-preview",
       });
     });
 
@@ -373,7 +373,7 @@ describe("ReminderSheet", () => {
       })
       .mockResolvedValueOnce({
         success: true,
-        delivery: "download",
+        delivery: "calendar-preview",
       });
 
     render(

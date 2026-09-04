@@ -213,9 +213,7 @@ async function createOrDownloadReminder() {
     onStateChange(readReminderState());
 
     const navigationDelay =
-      result.delivery === "download"
-        ? DOWNLOAD_NAVIGATION_DELAY_MS
-        : 0;
+  DOWNLOAD_NAVIGATION_DELAY_MS;
 
     setNavigationPending(true);
 

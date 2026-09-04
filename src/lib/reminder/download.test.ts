@@ -1,5 +1,4 @@
 import {
-  afterEach,
   beforeEach,
   describe,
   expect,
@@ -17,76 +16,29 @@ const reminderOptions = {
   language: "en" as const,
 };
 
-function setShareApis(options?: {
-  canShare?: (data?: ShareData) => boolean;
-  share?: (data?: ShareData) => Promise<void>;
-}) {
-  Object.defineProperty(navigator, "canShare", {
-    configurable: true,
-    value: options?.canShare,
-  });
-
-  Object.defineProperty(navigator, "share", {
-    configurable: true,
-    value: options?.share,
-  });
-}
-
 describe("calendar delivery", () => {
-  const createObjectUrl = vi.fn(
-    () => "blob:luna-reminder",
-  );
-
-  const revokeObjectUrl = vi.fn();
-
   beforeEach(() => {
-    vi.useFakeTimers();
-    setShareApis();
+    vi.restoreAllMocks();
+  });
 
-    createObjectUrl.mockClear();
-    revokeObjectUrl.mockClear();
+  it("opens the HTTPS calendar endpoint without invoking the Share Sheet", async () => {
+    const anchorClick = vi
+      .spyOn(
+        HTMLAnchorElement.prototype,
+        "click",
+      )
+      .mockImplementation(() => undefined);
+
+    const navigatorShare = vi.fn();
 
     Object.defineProperty(
-      URL,
-      "createObjectURL",
+      navigator,
+      "share",
       {
         configurable: true,
-        value: createObjectUrl,
+        value: navigatorShare,
       },
     );
-
-    Object.defineProperty(
-      URL,
-      "revokeObjectURL",
-      {
-        configurable: true,
-        value: revokeObjectUrl,
-      },
-    );
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("prefers native file sharing when the browser supports calendar files", async () => {
-    const canShare = vi.fn(() => true);
-
-    const share = vi
-      .fn<(data?: ShareData) => Promise<void>>()
-      .mockResolvedValue(undefined);
-
-    const anchorClick = vi
-      .spyOn(
-        HTMLAnchorElement.prototype,
-        "click",
-      )
-      .mockImplementation(() => undefined);
-
-    setShareApis({
-      canShare,
-      share,
-    });
 
     const result =
       await downloadCalendarFile(
@@ -95,240 +47,55 @@ describe("calendar delivery", () => {
 
     expect(result).toEqual({
       success: true,
-      delivery: "file-share",
+      delivery: "calendar-preview",
     });
 
-    expect(canShare).toHaveBeenCalledOnce();
-    expect(share).toHaveBeenCalledOnce();
-
-    const sharedFile =
-      share.mock.calls[0][0]?.files?.[0];
-
-    expect(sharedFile).toBeInstanceOf(File);
-
-    expect(sharedFile?.name).toBe(
-      "vote-for-luna-reminders.ics",
-    );
-
-    expect(sharedFile?.type).toBe(
-  "text/calendar",
-);
+    expect(
+      anchorClick,
+    ).toHaveBeenCalledOnce();
 
     expect(
-      await sharedFile?.text(),
-    ).toContain(
-      "RRULE:FREQ=DAILY;INTERVAL=1;COUNT=8",
-    );
-
-    expect(
-      createObjectUrl,
+      navigatorShare,
     ).not.toHaveBeenCalled();
 
-    expect(
-      anchorClick,
-    ).not.toHaveBeenCalled();
-  });
+    const clickedAnchor =
+      anchorClick.mock
+        .instances[0] as HTMLAnchorElement;
 
-  it("uses a Blob download when file sharing is unavailable", async () => {
-    const anchorClick = vi
-      .spyOn(
-        HTMLAnchorElement.prototype,
-        "click",
-      )
-      .mockImplementation(() => undefined);
+    const calendarUrl = new URL(
+      clickedAnchor.href,
+    );
 
-    const result =
-      await downloadCalendarFile(
-        reminderOptions,
-      );
-
-    expect(result).toEqual({
-      success: true,
-      delivery: "download",
-    });
+    expect(calendarUrl.pathname).toBe(
+      "/api/reminders/calendar.ics",
+    );
 
     expect(
-      createObjectUrl,
-    ).toHaveBeenCalledOnce();
+      calendarUrl.searchParams.get("start"),
+    ).toBe("2026-09-03T21:00:00.000Z");
 
     expect(
-      anchorClick,
-    ).toHaveBeenCalledOnce();
+      calendarUrl.searchParams.get("uid"),
+    ).toBe(
+      "luna-test@voteforluna.local",
+    );
 
     expect(
-      document.querySelector(
-        'a[download="vote-for-luna-reminders.ics"]',
+      calendarUrl.searchParams.get(
+        "language",
       ),
-    ).not.toBeInTheDocument();
+    ).toBe("en");
 
     expect(
-      revokeObjectUrl,
-    ).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(60_000);
+      clickedAnchor.hasAttribute("download"),
+    ).toBe(false);
 
     expect(
-      revokeObjectUrl,
-    ).toHaveBeenCalledWith(
-      "blob:luna-reminder",
-    );
+      document.body.contains(clickedAnchor),
+    ).toBe(false);
   });
 
-  it("falls back to download when canShare throws", async () => {
-    const anchorClick = vi
-      .spyOn(
-        HTMLAnchorElement.prototype,
-        "click",
-      )
-      .mockImplementation(() => undefined);
-
-    setShareApis({
-      canShare: () => {
-        throw new Error(
-          "broken capability probe",
-        );
-      },
-      share: vi.fn(
-        async () => undefined,
-      ),
-    });
-
-    const result =
-      await downloadCalendarFile(
-        reminderOptions,
-      );
-
-    expect(result).toEqual({
-      success: true,
-      delivery: "download",
-    });
-
-    expect(
-      anchorClick,
-    ).toHaveBeenCalledOnce();
-  });
-
-  it("falls back to download when an advertised share operation fails", async () => {
-    const anchorClick = vi
-      .spyOn(
-        HTMLAnchorElement.prototype,
-        "click",
-      )
-      .mockImplementation(() => undefined);
-
-    setShareApis({
-      canShare: () => true,
-      share: vi.fn(async () => {
-        throw new Error(
-          "embedded browser rejected file sharing",
-        );
-      }),
-    });
-
-    const result =
-      await downloadCalendarFile(
-        reminderOptions,
-      );
-
-    expect(result).toEqual({
-      success: true,
-      delivery: "download",
-    });
-
-    expect(
-      anchorClick,
-    ).toHaveBeenCalledOnce();
-  });
-
-  it("falls back to download when native sharing aborts without a usable target", async () => {
-  const abortError = new Error("cancelled");
-  abortError.name = "AbortError";
-
-  const anchorClick = vi
-    .spyOn(
-      HTMLAnchorElement.prototype,
-      "click",
-    )
-    .mockImplementation(() => undefined);
-
-  setShareApis({
-    canShare: () => true,
-    share: vi.fn(async () => {
-      throw abortError;
-    }),
-  });
-
-  const result =
-    await downloadCalendarFile(
-      reminderOptions,
-    );
-
-  expect(result).toEqual({
-    success: true,
-    delivery: "download",
-  });
-
-  expect(
-    createObjectUrl,
-  ).toHaveBeenCalledOnce();
-
-  expect(
-    anchorClick,
-  ).toHaveBeenCalledOnce();
-});
-
-  it("reports unsupported delivery APIs without throwing", async () => {
-    Object.defineProperty(
-      URL,
-      "createObjectURL",
-      {
-        configurable: true,
-        value: undefined,
-      },
-    );
-
-    await expect(
-      downloadCalendarFile(reminderOptions),
-    ).resolves.toEqual({
-      success: false,
-      error: "download-unsupported",
-    });
-  });
-
-  it("cleans up the temporary anchor and URL when the download click throws", async () => {
-    vi.spyOn(
-      HTMLAnchorElement.prototype,
-      "click",
-    ).mockImplementation(() => {
-      throw new Error("download blocked");
-    });
-
-    const result =
-      await downloadCalendarFile(
-        reminderOptions,
-      );
-
-    expect(result).toEqual({
-      success: false,
-      error: "download-failed",
-    });
-
-    expect(
-      document.querySelector(
-        'a[download="vote-for-luna-reminders.ics"]',
-      ),
-    ).not.toBeInTheDocument();
-
-    vi.advanceTimersByTime(60_000);
-
-    expect(
-      revokeObjectUrl,
-    ).toHaveBeenCalledWith(
-      "blob:luna-reminder",
-    );
-  });
-
-  it("reports invalid calendar input without touching browser delivery APIs", async () => {
+  it("reports invalid reminder time without opening anything", async () => {
     const anchorClick = vi
       .spyOn(
         HTMLAnchorElement.prototype,
@@ -350,11 +117,52 @@ describe("calendar delivery", () => {
     });
 
     expect(
-      createObjectUrl,
+      anchorClick,
     ).not.toHaveBeenCalled();
+  });
+
+  it("reports a forced failure for deterministic UI testing", async () => {
+    await expect(
+      downloadCalendarFile({
+        ...reminderOptions,
+        forceFailure: true,
+      }),
+    ).resolves.toEqual({
+      success: false,
+      error: "forced-failure",
+    });
+  });
+
+  it("removes the temporary link if opening the calendar fails", async () => {
+    const anchorClick = vi
+      .spyOn(
+        HTMLAnchorElement.prototype,
+        "click",
+      )
+      .mockImplementation(() => {
+        throw new Error(
+          "navigation blocked",
+        );
+      });
+
+    const result =
+      await downloadCalendarFile(
+        reminderOptions,
+      );
+
+    expect(result).toEqual({
+      success: false,
+      error: "download-failed",
+    });
 
     expect(
       anchorClick,
-    ).not.toHaveBeenCalled();
+    ).toHaveBeenCalledOnce();
+
+    expect(
+      document.querySelector(
+        'a[href*="calendar.ics"]',
+      ),
+    ).toBeNull();
   });
 });
